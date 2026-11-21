@@ -1,4 +1,3 @@
-
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 import random
@@ -311,4 +310,4 @@ def run_pool(platform: str, users: list[str], workers: int, reset: bool) -> None
                 "blocked": 0,
                 "blocked_list": [],
                 "last_error": "",
- 
+  
