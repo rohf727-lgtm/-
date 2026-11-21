@@ -1,32 +1,15 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import os
-import random
-import string
-import threading
-import time
+import os, random, string, threading, time
 from flask import Flask, Response, jsonify, render_template_string, request
 import requests
 
 app = Flask(__name__)
-MAX_USERNAMES = 50000
-MAX_UI_ITEMS = 1000
+MAX_USERNAMES, MAX_UI_ITEMS = 50000, 1000
 lock = threading.Lock()
 state = {
-    "running": False,
-    "stop": False,
-    "platform": "tiktok",
-    "done": 0,
-    "total": 0,
-    "elapsed": 0.0,
-    "rate": 0.0,
-    "eta": 0.0,
-    "available": 0,
-    "taken": 0,
-    "blocked": 0,
-    "last_error": "",
-    "available_list": [],
-    "blocked_list": [],
-    "items": [],
+    "running": False, "stop": False, "platform": "tiktok", "done": 0, "total": 0,
+    "elapsed": 0.0, "rate": 0.0, "eta": 0.0, "available": 0, "taken": 0, "blocked": 0,
+    "last_error": "", "available_list": [], "blocked_list": [], "items": [],
 }
 
 HTML = (
@@ -137,14 +120,10 @@ HTML = (
     "</script></body></html>"
 )
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36",
-    "Accept-Language": "en-US,en;q=0.9,ar;q=0.8",
-}
+HEADERS = {"User-Agent": "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36", "Accept-Language": "en-US,en;q=0.9,ar;q=0.8"}
 ALLOWED = set(string.ascii_lowercase + string.digits + "_.")
 CONS, VOWS = "bcdfghjklmnprstvwyz", "aeiou"
 _tls = threading.local()
-
 
 def get_session(workers: int) -> requests.Session:
     s = getattr(_tls, "session", None)
@@ -156,10 +135,8 @@ def get_session(workers: int) -> requests.Session:
         _tls.session = s
     return s
 
-
 def clean_affix(s: str) -> str:
     return "".join(c for c in (s or "").lower() if c in ALLOWED).strip(".")
-
 
 def make_syllable_core(core_len: int) -> str:
     parts = []
@@ -170,144 +147,100 @@ def make_syllable_core(core_len: int) -> str:
         raw = raw[:-1] + random.choice(string.digits)
     return raw
 
-
 def gen_users(count: int, length: int, mode: str, prefix: str, suffix: str) -> list[str]:
-    pool = (
-        string.ascii_lowercase
-        if mode == "alpha"
-        else (
-            string.digits
-            if mode == "digits"
-            else (
-                string.ascii_lowercase + string.digits + "_"
-                if mode == "underscore"
-                else (
-                    string.ascii_lowercase + string.digits + "."
-                    if mode == "dots"
-                    else string.ascii_lowercase + string.digits
-                )
-            )
-        )
-    )
+    pool = string.ascii_lowercase if mode == "alpha" else (string.digits if mode == "digits" else (string.ascii_lowercase + string.digits + "_" if mode == "underscore" else (string.ascii_lowercase + string.digits + "." if mode == "dots" else string.ascii_lowercase + string.digits)))
     fb = string.digits if mode == "digits" else (string.ascii_lowercase + string.digits)
     core_len = max(1, length - len(prefix) - len(suffix))
     seen, out = set(), []
     for _ in range(min(count * 8 + 500, 450000)):
-        if len(out) >= count:
-            break
-        core = (
-            make_syllable_core(core_len)
-            if mode == "syllable"
-            else ("".join(random.choices(pool, k=core_len)).strip("_.") or "".join(random.choices(fb, k=core_len)))
-        )
+        if len(out) >= count: break
+        core = make_syllable_core(core_len) if mode == "syllable" else ("".join(random.choices(pool, k=core_len)).strip("_.") or "".join(random.choices(fb, k=core_len)))
         u = clean_affix(f"{prefix}{core}{suffix}").replace("..", ".")
         if len(u) >= 2 and u not in seen:
-            seen.add(u)
-            out.append(u)
+            seen.add(u); out.append(u)
     while len(out) < count:
         u = clean_affix(f"{prefix}{''.join(random.choices(fb, k=max(2, core_len)))}{suffix}")
-        if u not in seen:
-            seen.add(u)
-            out.append(u)
-        else:
-            out.append(f"{u[:12]}{random.randint(10, 9999)}")
+        if u not in seen: seen.add(u); out.append(u)
+        else: out.append(f"{u[:12]}{random.randint(10, 9999)}")
     return out[:count]
-
 
 def check_platform(platform: str, u: str, workers: int) -> tuple[str, str]:
     s = get_session(workers)
     try:
         if platform == "youtube":
             h = s.head(f"https://www.youtube.com/@{u}", timeout=4, allow_redirects=True)
-            if h.status_code == 404:
-                return "available", "متاح ظاهرياً (404)"
+            if h.status_code == 404: return "available", "متاح ظاهرياً (404)"
             if h.status_code == 200:
                 r = s.get(f"https://www.youtube.com/@{u}", timeout=5)
-                if "This page isn't available" in r.text or "404 Not Found" in r.text:
-                    return "available", "متاح ظاهرياً"
-                return "taken", "مأخوذ (200)"
+                return ("available", "متاح ظاهرياً") if ("This page isn't available" in r.text or "404 Not Found" in r.text) else ("taken", "مأخوذ (200)")
             return "blocked", f"HTTP {h.status_code}"
         if platform == "discord":
-            r = s.post(
-                "https://discord.com/api/v9/unique-username/username-attempt-unauthenticated",
-                json={"username": u},
-                headers={"Content-Type": "application/json"},
-                timeout=5,
-            )
+            r = s.post("https://discord.com/api/v9/unique-username/username-attempt-unauthenticated", json={"username": u}, headers={"Content-Type": "application/json"}, timeout=5)
             if r.status_code == 200:
                 d = r.json() if r.content else {}
-                if d.get("taken") is False:
-                    return "available", "متاح ظاهرياً (200)"
-                if d.get("taken") is True:
-                    return "taken", "مأخوذ (200)"
+                if d.get("taken") is False: return "available", "متاح ظاهرياً (200)"
+                if d.get("taken") is True: return "taken", "مأخوذ (200)"
             return "blocked", f"HTTP {r.status_code}"
         h = s.head(f"https://www.tiktok.com/@{u}", timeout=4, allow_redirects=True)
-        if h.status_code == 404:
-            return "available", "متاح ظاهرياً (404)"
-        if h.status_code == 200:
-            return "taken", "مأخوذ (200)"
+        if h.status_code == 404: return "available", "متاح ظاهرياً (404)"
+        if h.status_code == 200: return "taken", "مأخوذ (200)"
         r = s.get(f"https://www.tiktok.com/@{u}", timeout=5)
-        if r.status_code == 404:
-            return "available", "متاح ظاهرياً (404)"
-        if r.status_code == 200:
-            return "taken", "مأخوذ (200)"
-        return "blocked", f"HTTP {r.status_code}"
+        if r.status_code == 404: return "available", "متاح ظاهرياً (404)"
+        return ("taken", "مأخوذ (200)") if r.status_code == 200 else ("blocked", f"HTTP {r.status_code}")
     except Exception as e:
         return "blocked", e.__class__.__name__
-
 
 def update_metrics(t0: float) -> None:
     elapsed = max(0.1, time.perf_counter() - t0)
     rate = state["done"] / elapsed
     rem = max(0, state["total"] - state["done"])
-    state["elapsed"] = round(elapsed, 1)
-    state["rate"] = round(rate, 1)
+    state["elapsed"], state["rate"] = round(elapsed, 1), round(rate, 1)
     state["eta"] = round(rem / rate, 1) if rate > 0 else 0.0
-
 
 def check_u(platform: str, u: str, t0: float, workers: int) -> None:
     with lock:
-        if state["stop"]:
-            return
+        if state["stop"]: return
     time.sleep(random.uniform(0.008, 0.035) if workers >= 25 else random.uniform(0.015, 0.07))
     with lock:
-        if state["stop"]:
-            return
+        if state["stop"]: return
     st, txt = check_platform(platform, u, workers)
     with lock:
-        if state["stop"]:
-            return
+        if state["stop"]: return
         state["done"] += 1
         if st == "available":
             state["available"] += 1
-            if len(state["available_list"]) < MAX_USERNAMES:
-                state["available_list"].append(u)
+            if len(state["available_list"]) < MAX_USERNAMES: state["available_list"].append(u)
         elif st == "taken":
             state["taken"] += 1
         else:
             state["blocked"] += 1
-            if len(state["blocked_list"]) < MAX_USERNAMES:
-                state["blocked_list"].append(u)
+            if len(state["blocked_list"]) < MAX_USERNAMES: state["blocked_list"].append(u)
         update_metrics(t0)
         state["items"].append({"u": u, "status": st, "txt": txt})
-        if len(state["items"]) > MAX_UI_ITEMS:
-            state["items"] = state["items"][-MAX_UI_ITEMS:]
-
+        if len(state["items"]) > MAX_UI_ITEMS: state["items"] = state["items"][-MAX_UI_ITEMS:]
 
 def run_pool(platform: str, users: list[str], workers: int, reset: bool) -> None:
     t0 = time.perf_counter()
     try:
         with lock:
-            base = {
-                "running": True,
-                "stop": False,
-                "platform": platform,
-                "done": 0,
-                "total": len(users),
-                "elapsed": 0.0,
-                "rate": 0.0,
-                "eta": 0.0,
-                "blocked": 0,
-                "blocked_list": [],
-                "last_error": "",
-  
+            base = {"running": True, "stop": False, "platform": platform, "done": 0, "total": len(users), "elapsed": 0.0, "rate": 0.0, "eta": 0.0, "blocked": 0, "blocked_list": [], "last_error": ""}
+            if reset: base.update({"available": 0, "taken": 0, "available_list": [], "items": []})
+            state.update(base)
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futs = [ex.submit(check_u, platform, u, t0, workers) for u in users]
+            for fut in as_completed(futs):
+                with lock:
+                    if state["stop"]:
+                        ex.shutdown(wait=False, cancel_futures=True)
+                        break
+                try: fut.result()
+                except Exception as exc:
+                    with lock: state["last_error"] = f"خطأ أثناء الفحص: {exc}"
+    except Exception as e:
+        with lock: state["last_error"] = f"خطأ في المهمة: {e}"
+    finally:
+        with lock:
+            state["running"], state["stop"], state["eta"] = False, False, 0.0
+            update_metrics(t0)
+
+def worker_job(platform: str, length
