@@ -33,6 +33,13 @@ HTML = (
     "<!DOCTYPE html><html lang='ar' dir='rtl'><head><meta charset='UTF-8'>"
     "<meta name='viewport' content='width=device-width,initial-scale=1.0'><title>صائد يوزرات</title><style>"
     "*{box-sizing:border-box}body{background:#000;color:#f3f4f6;font-family:Tahoma,sans-serif;margin:0;padding:12px}"
+    ".gate{position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center;padding:14px;z-index:99}"
+    ".gate.hide{display:none}"
+    ".gbox{width:100%;max-width:360px;background:#070709;border:1px solid #330c11;border-radius:16px;padding:20px;text-align:center;box-shadow:0 0 36px rgba(220,38,38,.22)}"
+    ".gbox h3{margin:0 0 8px;color:#ef4444;font-size:19px}.gbox p{margin:0 0 12px;color:#9ca3af;font-size:12px}"
+    ".gbox input{text-align:center;letter-spacing:4px;font-weight:bold}"
+    ".gbox button{width:100%;margin-top:10px;padding:10px;border-radius:9px;border:none;background:#dc2626;color:#fff;font-weight:bold;cursor:pointer}"
+    ".gerr{color:#f87171;font-size:12px;min-height:16px;margin-top:8px}"
     ".wrap{max-width:760px;margin:8px auto;background:#070709;border:1px solid #330c11;border-radius:16px;padding:16px;box-shadow:0 0 36px rgba(220,38,38,.18)}"
     "h2{margin:0 0 12px;text-align:center;color:#ef4444;font-size:21px}"
     ".tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}"
@@ -56,7 +63,13 @@ HTML = (
     ".logs{max-height:250px;overflow-y:auto;font-size:12px;margin-top:6px;line-height:1.6}"
     ".ok{color:#4ade80}.taken{color:#f87171}.warn{color:#facc15}.msg{color:#4ade80;font-size:12px;min-height:16px;margin-top:6px}"
     "@media(max-width:600px){.row,.row3,.btns{grid-template-columns:1fr}}"
-    "</style></head><body><div class='wrap'>"
+    "</style></head><body>"
+    "<div class='gate' id='gate'><form class='gbox' id='gform'>"
+    "<h3>رمز الدخول</h3><p>أدخل الرقم السري للدخول إلى الموقع</p>"
+    "<input type='password' inputmode='numeric' id='pin' maxlength='12' placeholder='****' required>"
+    "<button type='submit'>دخول</button><div class='gerr' id='gerr'></div>"
+    "</form></div>"
+    "<div class='wrap'>"
     "<h2>صائد يوزرات تيك • يوتيوب • ديسكورد</h2>"
     "<div class='tabs'>"
     "<button type='button' class='tab active' data-p='tiktok'>تيك توك</button>"
@@ -66,7 +79,7 @@ HTML = (
     "<div class='pbox active' id='p-tiktok'>فحص فائق ليوزرات تيك توك فقط مع تحقق سريع. راجع اليوزر داخل التطبيق قبل اعتماده.</div>"
     "<div class='pbox' id='p-youtube'>فحص فائق لمعرفات يوتيوب (@Handle) فقط بنفس الإعدادات والسرعة القصوى.</div>"
     "<div class='pbox' id='p-discord'>فحص توفر أسماء ديسكورد فقط دون تغيير تلقائي للحساب. اضغط على اليوزر المتاح لنسخه وتغييره يدوياً من إعدادات ديسكورد."
-    "<div class='row'><div><label>يوزر حسابك (اختياري)</label><input type='text' id='dc_user' placeholder='مثال: my_user'></div>"
+    "<div class='row'><div><label>يوزر حسابك (اختياري للتذكير)</label><input type='text' id='dc_user' placeholder='مثال: my_user'></div>"
     "<div><label>طريقة التغيير</label><input type='text' value='نسخ وتغيير يدوي آمن' readonly></div></div>"
     "<a class='link-btn' href='https://discord.com/channels/@me' target='_blank' rel='noopener noreferrer'>فتح ديسكورد لتغيير اليوزر يدوياً</a>"
     "</div>"
@@ -105,6 +118,9 @@ HTML = (
     "</div></div><div class='msg' id='msg'></div><div class='grid' id='grid'></div></div>"
     "<div class='sec-box'><div style='color:#f87171;font-size:13px;font-weight:bold'>سجل الفحص المباشر</div><div class='logs' id='logs'></div></div>"
     "</div><script>"
+    "const gate=document.getElementById('gate'),gform=document.getElementById('gform'),pin=document.getElementById('pin'),gerr=document.getElementById('gerr');"
+    "if(sessionStorage.getItem('auth2007')==='1'){gate.classList.add('hide');}"
+    "gform.onsubmit=e=>{e.preventDefault();if(pin.value.trim()==='2007'){sessionStorage.setItem('auth2007','1');gate.classList.add('hide');gerr.textContent='';}else{gerr.textContent='الرمز غير صحيح';pin.value='';pin.focus();}};"
     "let plat='tiktok',avail=[],lastAvailCount=0,timer=null;"
     "const startBtn=document.getElementById('startBtn'),stopBtn=document.getElementById('stopBtn'),retryBtn=document.getElementById('retryBtn'),clearBtn=document.getElementById('clearBtn'),f=document.getElementById('f'),bar=document.getElementById('bar'),info=document.getElementById('info'),errBox=document.getElementById('errBox'),grid=document.getElementById('grid'),logs=document.getElementById('logs'),msg=document.getElementById('msg'),sound=document.getElementById('sound');"
     "function beep(){if(!sound.checked)return;try{const ctx=new(window.AudioContext||window.webkitAudioContext)(),o=ctx.createOscillator(),g=ctx.createGain();o.type='triangle';o.frequency.value=960;g.gain.value=0.09;o.connect(g);g.connect(ctx.destination);o.start();setTimeout(()=>{o.stop();ctx.close();},140);}catch{}}"
@@ -294,47 +310,4 @@ def run_pool(platform: str, users: list[str], workers: int, reset: bool) -> None
                 "blocked": 0,
                 "blocked_list": [],
                 "last_error": "",
-            }
-            if reset:
-                base.update({"available": 0, "taken": 0, "available_list": [], "items": []})
-            state.update(base)
-        with ThreadPoolExecutor(max_workers=workers) as ex:
-            futs = [ex.submit(check_u, platform, u, t0, workers) for u in users]
-            for fut in as_completed(futs):
-                with lock:
-                    if state["stop"]:
-                        ex.shutdown(wait=False, cancel_futures=True)
-                        break
-                try:
-                    fut.result()
-                except Exception as exc:
-                    with lock:
-                        state["last_error"] = f"خطأ أثناء الفحص: {exc}"
-    except Exception as e:
-        with lock:
-            state["last_error"] = f"خطأ في المهمة: {e}"
-    finally:
-        with lock:
-            state["running"] = False
-            state["stop"] = False
-            state["eta"] = 0.0
-            update_metrics(t0)
-
-
-def worker_job(platform: str, length: int, count: int, mode: str, prefix: str, suffix: str, workers: int) -> None:
-    run_pool(platform, gen_users(count, length, mode, prefix, suffix), workers, reset=True)
-
-
-@app.route("/")
-def index():
-    return render_template_string(HTML)
-
-
-@app.route("/start", methods=["POST"])
-def start():
-    with lock:
-        if state["running"]:
-            return jsonify({"ok": False, "error": "يوجد فحص يعمل حالياً، انتظر أو اضغط إيقاف."})
-    platform = request.form.get("platform", "tiktok")
-    if platform not in {"tiktok", "youtube", "discord"}:
-    
+ 
