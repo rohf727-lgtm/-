@@ -207,11 +207,9 @@ def check_platform(platform: str, u: str, workers: int) -> tuple[str, str]:
                 return "available", "متاح ظاهرياً (404)"
             if h.status_code == 200:
                 r = s.get(f"https://www.youtube.com/@{u}", timeout=5)
-                return (
-                    ("available", "متاح ظاهرياً")
-                    if ("This page isn't available" in r.text or "404 Not Found" in r.text)
-                    else ("taken", "مأخوذ (200)")
-                )
+                if "This page isn't available" in r.text or "404 Not Found" in r.text:
+                    return "available", "متاح ظاهرياً"
+                return "taken", "مأخوذ (200)"
             return "blocked", f"HTTP {h.status_code}"
         if platform == "discord":
             r = s.post(
@@ -235,7 +233,9 @@ def check_platform(platform: str, u: str, workers: int) -> tuple[str, str]:
         r = s.get(f"https://www.tiktok.com/@{u}", timeout=5)
         if r.status_code == 404:
             return "available", "متاح ظاهرياً (404)"
-        return ("taken", "مأخوذ (200)") if r.status_code == 200 else ("blocked", f"HTTP {r.status_code}")
+        if r.status_code == 200:
+            return "taken", "مأخوذ (200)"
+        return "blocked", f"HTTP {r.status_code}"
     except Exception as e:
         return "blocked", e.__class__.__name__
 
@@ -244,7 +244,8 @@ def update_metrics(t0: float) -> None:
     elapsed = max(0.1, time.perf_counter() - t0)
     rate = state["done"] / elapsed
     rem = max(0, state["total"] - state["done"])
-    state["elapsed"], state["rate"] = round(elapsed, 1), round(rate, 1)
+    state["elapsed"] = round(elapsed, 1)
+    state["rate"] = round(rate, 1)
     state["eta"] = round(rem / rate, 1) if rate > 0 else 0.0
 
 
@@ -314,7 +315,9 @@ def run_pool(platform: str, users: list[str], workers: int, reset: bool) -> None
             state["last_error"] = f"خطأ في المهمة: {e}"
     finally:
         with lock:
-            state["running"], state["stop"], state["eta"] = False, False, 0.0
+            state["running"] = False
+            state["stop"] = False
+            state["eta"] = 0.0
             update_metrics(t0)
 
 
