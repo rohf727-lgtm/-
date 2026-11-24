@@ -411,4 +411,379 @@ def gen_users(count: int, length: int, mode: str, prefix: str, suffix: str, cust
 
     pool = (
         string.ascii_lowercase
-        if mode == "alp
+        if mode == "alpha"
+            else (
+            string.digits
+            if mode == "digits"
+            else (
+                string.ascii_lowercase + string.digits + "_"
+                if mode == "underscore"
+                else (
+                    string.ascii_lowercase + string.digits + "."
+                    if mode == "dots"
+                    else string.ascii_lowercase + string.digits
+                )
+            )
+        )
+    )
+    fb = string.digits if mode == "digits" else (string.ascii_lowercase + string.digits)
+    core_len = max(1, length - len(prefix) - len(suffix))
+    seen, out = set(), []
+    for _ in range(min(count * 8 + 500, 450000)):
+        if len(out) >= count:
+            break
+        if mode == "syllable":
+            core = make_syllable_core(core_len)
+        elif mode == "short_sharp":
+            core = make_sharp_core(core_len)
+        elif mode == "stylish_tags":
+            core = make_stylish_core(core_len)
+        else:
+            core = "".join(random.choices(pool, k=core_len)).strip("_.") or "".join(random.choices(fb, k=core_len))
+        u = clean_affix(f"{prefix}{core}{suffix}").replace("..", ".")
+        if len(u) >= 2 and u not in seen:
+            seen.add(u)
+            out.append(u)
+    while len(out) < count:
+        u = clean_affix(f"{prefix}{''.join(random.choices(fb, k=max(2, core_len)))}{suffix}")
+        if u not in seen:
+            seen.add(u)
+            out.append(u)
+        else:
+            out.append(f"{u[:12]}{random.randint(10, 9999)}")
+    return out[:count]
+
+
+def _probe_once(s: requests.Session, platform: str, u: str) -> tuple[str, str]:
+    if platform == "youtube":
+        r = s.get(f"https://www.youtube.com/@{u}", timeout=7, allow_redirects=True)
+        if r.status_code == 404:
+            return "available", "غير موجود (404)"
+        if r.status_code == 429:
+            return "blocked", "تقييد مؤقت (429)"
+        if r.status_code >= 500 or r.status_code == 403:
+            return "blocked", f"حجب/خطأ ({r.status_code})"
+        html = r.text
+        not_found_markers = [
+            "This page isn't available",
+            "404 Not Found",
+            "HTTP ERROR 404",
+            'itemSectionRenderer":{"contents":[{"messageRenderer"',
+        ]
+        channel_markers = [
+            '"channelId":"',
+            '"externalId":"',
+            f'/@{u.lower()}"',
+        ]
+        if any(m in html for m in not_found_markers) and not any(m in html for m in channel_markers):
+            return "available", "غير موجود في يوتيوب"
+        if any(m in html for m in channel_markers):
+            return "taken", "قناة موجودة"
+        return "blocked", "تعذر جزم حالة القناة"
+
+    if platform == "discord":
+        r = s.post(
+            "https://discord.com/api/v9/unique-username/username-attempt-unauthenticated",
+            json={"username": u},
+            headers={"Content-Type": "application/json", "User-Agent": random.choice(USER_AGENTS)},
+            timeout=7,
+        )
+        if r.status_code == 429:
+            return "blocked", "تقييد مؤقت (429)"
+        if r.status_code == 200:
+            try:
+                d = r.json()
+            except ValueError:
+                return "blocked", "رد غير صالح من ديسكورد"
+            if d.get("taken") is False:
+                return "available", "غير مستخدم في API"
+            if d.get("taken") is True:
+                return "taken", "مستخدم مسبقاً"
+        return "blocked", f"حالة غير مؤكدة ({r.status_code})"
+
+    # tiktok
+    r = s.get(f"https://www.tiktok.com/@{u}", timeout=7, allow_redirects=True)
+    if r.status_code == 404:
+        return "available", "غير موجود (404)"
+    if r.status_code == 429:
+        return "blocked", "تقييد مؤقت (429)"
+    if r.status_code in (403, 405, 503) or r.status_code >= 500:
+        return "blocked", f"حجب/خطأ ({r.status_code})"
+
+    html = r.text
+    challenge_markers = [
+        "captcha",
+        "verify center",
+        "sec_user_id",
+        "Please wait...",
+        "Access Denied",
+    ]
+    user_markers = [
+        '"webapp.user-detail"',
+        '"secUid":"',
+    ]
+
+    if re.search(r'"uniqueId"\s*:\s*"' + re.escape(u) + r'"', html, flags=re.IGNORECASE) or any(
+        m in html for m in user_markers
+    ):
+        return "taken", "حساب نشط/موجود"
+
+    if r.status_code == 200 and not any(m in html for m in challenge_markers):
+        if "Couldn't find this account" in html or "Page not found" in html or len(html) < 4000:
+            return "available", "غير موجود في تيك توك"
+        return "blocked", "استجابة غير حاسمة"
+
+    return "blocked", "تحقق أمني أو حجب"
+
+
+def check_platform(platform: str, u: str, workers: int) -> tuple[str, str, int]:
+    s = get_session(workers)
+    retries = 0
+    for attempt in range(2):
+        try:
+            st1, reason1 = _probe_once(s, platform, u)
+            if st1 == "blocked":
+                if attempt == 0:
+                    retries += 1
+                    time.sleep(random.uniform(0.35, 0.75))
+                    continue
+                return "blocked", reason1, retries
+
+            time.sleep(random.uniform(0.05, 0.14))
+            st2, reason2 = _probe_once(s, platform, u)
+
+            if st1 == "available" and st2 == "available":
+                return "available", f"مؤكد متاح ({reason2})", retries
+            if st1 == "taken" and st2 == "taken":
+                return "taken", f"مؤكد مأخوذ ({reason2})", retries
+            if st1 != st2:
+                return "blocked", f"تعارض الفحصين ({st1}/{st2})", retries
+            return "blocked", reason2, retries
+        except Exception as e:
+            if attempt == 0:
+                retries += 1
+                time.sleep(0.2)
+                continue
+            return "blocked", e.__class__.__name__, retries
+    return "blocked", "تعذر التحقق", retries
+
+
+def update_metrics(t0: float) -> None:
+    elapsed = max(0.1, time.perf_counter() - t0)
+    rate = state["done"] / elapsed
+    rem = max(0, state["total"] - state["done"])
+    state["elapsed"] = round(elapsed, 1)
+    state["rate"] = round(rate, 1)
+    state["eta"] = round(rem / rate, 1) if rate > 0 else 0.0
+
+
+def check_u(platform: str, u: str, t0: float, workers: int, jitter_sec: float) -> None:
+    with lock:
+        if state["stop"]:
+            return
+    if jitter_sec > 0:
+        time.sleep(random.uniform(jitter_sec * 0.5, jitter_sec * 1.4))
+    with lock:
+        if state["stop"]:
+            return
+    st, txt, retries = check_platform(platform, u, workers)
+    with lock:
+        if state["stop"]:
+            return
+        state["done"] += 1
+        state["retries_used"] += retries
+        if st == "available":
+            state["available"] += 1
+            if len(state["available_list"]) < MAX_USERNAMES:
+                state["available_list"].append(u)
+        elif st == "taken":
+            state["taken"] += 1
+        else:
+            state["blocked"] += 1
+            if len(state["blocked_list"]) < MAX_USERNAMES:
+                state["blocked_list"].append(u)
+        update_metrics(t0)
+        state["items"].append({"u": u, "status": st, "txt": txt})
+        if len(state["items"]) > MAX_UI_ITEMS:
+            state["items"] = state["items"][-MAX_UI_ITEMS:]
+
+
+def run_pool(platform: str, users: list[str], workers: int, reset: bool, jitter_sec: float = 0.025) -> list[str]:
+    t0 = time.perf_counter()
+    try:
+        with lock:
+            base = {
+                "running": True,
+                "stop": False,
+                "platform": platform,
+                "done": 0,
+                "total": len(users),
+                "elapsed": 0.0,
+                "rate": 0.0,
+                "eta": 0.0,
+                "blocked": 0,
+                "blocked_list": [],
+                "last_error": "",
+            }
+            if reset:
+                base.update({"available": 0, "taken": 0, "retries_used": 0, "available_list": [], "items": []})
+            state.update(base)
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futs = [ex.submit(check_u, platform, u, t0, workers, jitter_sec) for u in users]
+            for fut in as_completed(futs):
+                with lock:
+                    if state["stop"]:
+                        ex.shutdown(wait=False, cancel_futures=True)
+                        break
+                try:
+                    fut.result()
+                except Exception as exc:
+                    with lock:
+                        state["last_error"] = f"خطأ أثناء الفحص: {exc}"
+    except Exception as e:
+        with lock:
+            state["last_error"] = f"خطأ في المهمة: {e}"
+    finally:
+        with lock:
+            remaining_blocked = list(state["blocked_list"])
+            state["running"] = False
+            state["stop"] = False
+            state["eta"] = 0.0
+            update_metrics(t0)
+    return remaining_blocked
+
+
+def worker_job(
+    platform: str,
+    length: int,
+    count: int,
+    mode: str,
+    prefix: str,
+    suffix: str,
+    workers: int,
+    jitter_sec: float,
+    auto_retry: bool,
+    custom_raw: str,
+) -> None:
+    users = gen_users(count, length, mode, prefix, suffix, custom_raw=custom_raw)
+    if not users:
+        with lock:
+            state["last_error"] = "لم يتم العثور على يوزرات صالحة للفحص."
+        return
+    blocked_after = run_pool(platform, users, workers, reset=True, jitter_sec=jitter_sec)
+    with lock:
+        stopped = state["stop"]
+    if auto_retry and not stopped and blocked_after:
+        run_pool(platform, blocked_after, max(1, min(workers, 10)), reset=False, jitter_sec=max(jitter_sec, 0.06))
+
+
+@app.route("/")
+def index():
+    return render_template_string(HTML)
+
+
+@app.route("/start", methods=["POST"])
+def start_scan():
+    with lock:
+        if state["running"]:
+            return jsonify({"ok": False, "error": "يوجد فحص قيد التشغيل حالياً."})
+
+    platform = (request.form.get("platform") or "tiktok").strip().lower()
+    if platform not in {"tiktok", "youtube", "discord"}:
+        platform = "tiktok"
+
+    try:
+        length = max(2, min(16, int(request.form.get("length", 4))))
+        count = max(1, min(MAX_USERNAMES, int(request.form.get("count", 500))))
+        workers = max(1, min(MAX_WORKERS, int(request.form.get("workers", 12))))
+        jitter_ms = max(0, min(500, int(request.form.get("jitter_ms", 25))))
+    except ValueError:
+        return jsonify({"ok": False, "error": "قيم غير صالحة."})
+
+    mode = (request.form.get("mode") or "alnum").strip()
+    if mode not in {"alnum", "alpha", "underscore", "dots", "syllable", "short_sharp", "stylish_tags", "digits", "custom_list"}:
+        mode = "alnum"
+
+    prefix = clean_affix(request.form.get("prefix") or "")[:8]
+    suffix = clean_affix(request.form.get("suffix") or "")[:8]
+    custom_raw = request.form.get("custom_list") or ""
+    auto_retry = (request.form.get("auto_retry") or "0") == "1"
+
+    threading.Thread(
+        target=worker_job,
+        args=(platform, length, count, mode, prefix, suffix, workers, jitter_ms / 1000.0, auto_retry, custom_raw),
+        daemon=True,
+    ).start()
+    return jsonify({"ok": True})
+
+
+@app.route("/retry-blocked", methods=["POST"])
+def retry_blocked():
+    with lock:
+        if state["running"]:
+            return jsonify({"ok": False, "error": "يوجد فحص قيد التشغيل حالياً."})
+        blocked_users = list(state["blocked_list"])
+        platform = (request.form.get("platform") or state["platform"] or "tiktok").strip().lower()
+
+    if not blocked_users:
+        return jsonify({"ok": False, "error": "لا توجد يوزرات مقيدة لإعادتها."})
+
+    try:
+        workers = max(1, min(MAX_WORKERS, int(request.form.get("workers", 12))))
+        jitter_ms = max(0, min(500, int(request.form.get("jitter_ms", 40))))
+    except ValueError:
+        workers, jitter_ms = 12, 40
+
+    threading.Thread(
+        target=run_pool,
+        args=(platform, blocked_users, max(1, min(workers, 12)), False, jitter_ms / 1000.0),
+        daemon=True,
+    ).start()
+    return jsonify({"ok": True})
+
+
+@app.route("/stop", methods=["POST"])
+def stop_scan():
+    with lock:
+        state["stop"] = True
+    return jsonify({"ok": True})
+
+
+@app.route("/status")
+def get_status():
+    with lock:
+        return jsonify({
+            "running": state["running"],
+            "platform": state["platform"],
+            "done": state["done"],
+            "total": state["total"],
+            "elapsed": state["elapsed"],
+            "rate": state["rate"],
+            "eta": state["eta"],
+            "available": state["available"],
+            "taken": state["taken"],
+            "blocked": state["blocked"],
+            "retries_used": state["retries_used"],
+            "last_error": state["last_error"],
+            "available_list": state["available_list"][-300:],
+            "items": state["items"][-120:],
+        })
+
+
+@app.route("/export")
+def export_txt():
+    platform = (request.args.get("platform") or "all").strip().lower()
+    with lock:
+        lines = [f"@{u}" for u in state["available_list"]]
+    body = "\n".join(lines) + ("\n" if lines else "")
+    return Response(
+        body,
+        mimetype="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename=available_{platform}.txt"},
+    )
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, threaded=True)
+    
