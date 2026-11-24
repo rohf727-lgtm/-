@@ -44,14 +44,6 @@ HTML = """<!DOCTYPE html>
 <style>
 *{box-sizing:border-box}
 body{background:#000;color:#f3f4f6;font-family:Tahoma,sans-serif;margin:0;padding:12px}
-.gate{position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center;padding:14px;z-index:99}
-.gate.hide{display:none}
-.gbox{width:100%;max-width:360px;background:#070709;border:1px solid #3d0d13;border-radius:16px;padding:20px;text-align:center;box-shadow:0 0 40px rgba(220,38,38,.28)}
-.gbox h3{margin:0 0 8px;color:#ef4444;font-size:19px}
-.gbox p{margin:0 0 12px;color:#9ca3af;font-size:12px}
-.gbox input{text-align:center;letter-spacing:4px;font-weight:bold}
-.gbox button{width:100%;margin-top:10px;padding:10px;border-radius:9px;border:none;background:#dc2626;color:#fff;font-weight:bold;cursor:pointer}
-.gerr{color:#f87171;font-size:12px;min-height:16px;margin-top:8px}
 .wrap{max-width:820px;margin:8px auto;background:#070709;border:1px solid #3d0d13;border-radius:16px;padding:16px;box-shadow:0 0 40px rgba(220,38,38,.2)}
 h2{margin:0 0 12px;text-align:center;color:#ef4444;font-size:21px}
 .tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
@@ -92,16 +84,6 @@ button:disabled{opacity:.45;cursor:not-allowed}
 </style>
 </head>
 <body>
-<div class="gate" id="gate">
-  <form class="gbox" id="gform">
-    <h3>رمز الدخول</h3>
-    <p>أدخل الرقم السري للدخول إلى الموقع</p>
-    <input type="password" inputmode="numeric" id="pin" maxlength="12" placeholder="****" required>
-    <button type="submit">دخول</button>
-    <div class="gerr" id="gerr"></div>
-  </form>
-</div>
-
 <div class="wrap">
   <h2>صائد يوزرات تيك • يوتيوب • ديسكورد</h2>
   <div class="tabs">
@@ -202,10 +184,6 @@ button:disabled{opacity:.45;cursor:not-allowed}
 </div>
 
 <script>
-const gate=document.getElementById('gate'),gform=document.getElementById('gform'),pin=document.getElementById('pin'),gerr=document.getElementById('gerr');
-if(sessionStorage.getItem('auth2007')==='1'){gate.classList.add('hide');}
-gform.onsubmit=e=>{e.preventDefault();if(pin.value.trim()==='2007'){sessionStorage.setItem('auth2007','1');gate.classList.add('hide');gerr.textContent='';}else{gerr.textContent='الرمز غير صحيح';pin.value='';pin.focus();}};
-
 let plat='tiktok',flt='all',avail=[],lastItems=[],lastAvailCount=0,timer=null;
 const startBtn=document.getElementById('startBtn'),stopBtn=document.getElementById('stopBtn'),retryBtn=document.getElementById('retryBtn'),clearBtn=document.getElementById('clearBtn'),f=document.getElementById('f'),bar=document.getElementById('bar'),info=document.getElementById('info'),errBox=document.getElementById('errBox'),grid=document.getElementById('grid'),logs=document.getElementById('logs'),msg=document.getElementById('msg'),sound=document.getElementById('sound'),autoRetry=document.getElementById('auto_retry'),modeSel=document.getElementById('mode'),customListBox=document.getElementById('customListBox');
 
@@ -412,7 +390,7 @@ def gen_users(count: int, length: int, mode: str, prefix: str, suffix: str, cust
     pool = (
         string.ascii_lowercase
         if mode == "alpha"
-            else (
+        else (
             string.digits
             if mode == "digits"
             else (
@@ -450,8 +428,8 @@ def gen_users(count: int, length: int, mode: str, prefix: str, suffix: str, cust
             seen.add(u)
             out.append(u)
         else:
-            out.append(f"{u[:12]}{random.randint(10, 9999)}")
-    return out[:count]
+            out.append(f"{u[:12]}{
+                    return out[:count]
 
 
 def _probe_once(s: requests.Session, platform: str, u: str) -> tuple[str, str]:
@@ -786,4 +764,4 @@ def export_txt():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, threaded=True)
-    
+                       
