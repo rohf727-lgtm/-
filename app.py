@@ -429,8 +429,9 @@ def gen_users(count: int, length: int, mode: str, prefix: str, suffix: str, cust
             out.append(u)
         else:
                         out.append(f"{u[:12]}{random.randint(10, 9999)}")
-            
-                    return out[:count]
+
+    return out[:count]
+    
 
 
 def _probe_once(s: requests.Session, platform: str, u: str) -> tuple[str, str]:
